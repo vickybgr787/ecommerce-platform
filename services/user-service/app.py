@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 import os
 
@@ -19,6 +20,12 @@ DATABASE_URL = os.getenv(
 )
 
 engine = create_engine(DATABASE_URL)
+
+
+class UserCreate(BaseModel):
+    name: str
+    email: str
+    status: str = "ACTIVE"
 
 
 @app.get("/health")
@@ -65,7 +72,7 @@ def get_users():
 
 
 @app.post("/users")
-def create_user():
+def create_user(user: UserCreate):
     with engine.begin() as connection:
         result = connection.execute(
             text("""
@@ -74,9 +81,9 @@ def create_user():
                 RETURNING id, name, email, status
             """),
             {
-                "name": "Vikram Danu",
-                "email": "vikram@example.com",
-                "status": "ACTIVE"
+                "name": user.name,
+                "email": user.email,
+                "status": user.status
             }
         )
 
