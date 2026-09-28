@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from kafka import KafkaConsumer
+from sqlalchemy import create_engine, text
 import json
 import os
 import threading
@@ -20,32 +21,12 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv(
     "kafka:9092"
 )
 
-payments = [
-    {
-        "id": 1,
-        "order_id": 1,
-        "user_id": 1,
-        "amount": 1200,
-        "currency": "EUR",
-        "status": "SUCCESS"
-    },
-    {
-        "id": 2,
-        "order_id": 2,
-        "user_id": 2,
-        "amount": 80,
-        "currency": "EUR",
-        "status": "PENDING"
-    },
-    {
-        "id": 3,
-        "order_id": 3,
-        "user_id": 3,
-        "amount": 350,
-        "currency": "EUR",
-        "status": "FAILED"
-    }
-]
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg://ecommerce:ecommerce@postgres:5432/ecommerce"
+)
+
+engine = create_engine(DATABASE_URL)
 
 
 def process_order_event(event):
@@ -54,22 +35,69 @@ def process_order_event(event):
 
     order = event["order"]
 
-    payment = {
-        "id": len(payments) + 1,
-        "order_id": order["id"],
-        "user_id": order["user_id"],
-        "amount": order["amount"],
-        "currency": order.get("currency", "EUR"),
-        "status": "SUCCESS"
-    }
+    try:
+        with engine.begin() as connection:
+            existing_payment = connection.execute(
+                text("""
+                    SELECT id
+                    FROM payments
+                    WHERE order_id = :order_id
+                """),
+                {
+                    "order_id": order["id"]
+                }
+            ).fetchone()
 
-    payments.append(payment)
+            if existing_payment:
+                print(
+                    f"Payment already exists for order_id={order['id']}. "
+                    f"Skipping duplicate event.",
+                    flush=True
+                )
+                return
 
-    print(
-        f"Payment processed: order_id={order['id']}, "
-        f"amount={order['amount']} EUR",
-        flush=True
-    )
+            result = connection.execute(
+                text("""
+                    INSERT INTO payments (
+                        order_id,
+                        user_id,
+                        amount,
+                        currency,
+                        status
+                    )
+                    VALUES (
+                        :order_id,
+                        :user_id,
+                        :amount,
+                        :currency,
+                        :status
+                    )
+                    RETURNING id, order_id, user_id, amount, currency, status
+                """),
+                {
+                    "order_id": order["id"],
+                    "user_id": order["user_id"],
+                    "amount": order["amount"],
+                    "currency": "EUR",
+                    "status": "SUCCESS"
+                }
+            )
+
+            payment = result.fetchone()
+
+        print(
+            f"Payment saved: payment_id={payment.id}, "
+            f"order_id={payment.order_id}, "
+            f"amount={payment.amount} EUR",
+            flush=True
+        )
+
+    except Exception as e:
+        print(
+            f"Payment processing failed for "
+            f"order_id={order['id']}: {e}",
+            flush=True
+        )
 
 
 def consume_orders():
@@ -108,9 +136,50 @@ def start_kafka_consumer():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+
+        return {
+            "status": "healthy",
+            "database": "connected"
+        }
+
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "database": "disconnected",
+            "error": str(e)
+        }
 
 
 @app.get("/payments")
 def get_payments():
+    with engine.connect() as connection:
+        result = connection.execute(
+            text("""
+                SELECT
+                    id,
+                    order_id,
+                    user_id,
+                    amount,
+                    currency,
+                    status
+                FROM payments
+                ORDER BY id
+            """)
+        )
+
+        payments = [
+            {
+                "id": row.id,
+                "order_id": row.order_id,
+                "user_id": row.user_id,
+                "amount": float(row.amount),
+                "currency": row.currency,
+                "status": row.status
+            }
+            for row in result
+        ]
+
     return payments

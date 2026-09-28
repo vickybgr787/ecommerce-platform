@@ -1,7 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import create_engine, text
+import os
 
 app = FastAPI(title="User Service")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -10,31 +13,78 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg://ecommerce:ecommerce@postgres:5432/ecommerce"
+)
+
+engine = create_engine(DATABASE_URL)
+
 
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+
+        return {
+            "status": "healthy",
+            "database": "connected"
+        }
+
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "database": "disconnected",
+            "error": str(e)
+        }
 
 
 @app.get("/users")
 def get_users():
-    return [
-        {
-            "id": 1,
-            "name": "Vikram Danu",
-            "email": "vikram@example.com",
-            "status": "ACTIVE"
-        },
-        {
-            "id": 2,
-            "name": "John Smith",
-            "email": "john@example.com",
-            "status": "ACTIVE"
-        },
-        {
-            "id": 3,
-            "name": "Alice Brown",
-            "email": "alice@example.com",
-            "status": "ACTIVE"
-        }
-    ]
+    with engine.connect() as connection:
+        result = connection.execute(
+            text("""
+                SELECT id, name, email, status
+                FROM users
+                ORDER BY id
+            """)
+        )
+
+        users = [
+            {
+                "id": row.id,
+                "name": row.name,
+                "email": row.email,
+                "status": row.status
+            }
+            for row in result
+        ]
+
+    return users
+
+
+@app.post("/users")
+def create_user():
+    with engine.begin() as connection:
+        result = connection.execute(
+            text("""
+                INSERT INTO users (name, email, status)
+                VALUES (:name, :email, :status)
+                RETURNING id, name, email, status
+            """),
+            {
+                "name": "Vikram Danu",
+                "email": "vikram@example.com",
+                "status": "ACTIVE"
+            }
+        )
+
+        row = result.fetchone()
+
+    return {
+        "id": row.id,
+        "name": row.name,
+        "email": row.email,
+        "status": row.status
+    }
