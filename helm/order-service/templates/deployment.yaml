@@ -11,6 +11,7 @@ spec:
     metadata:
       labels:
         app: order-service
+        environment: {{ .Values.environment }}
     spec:
       tolerations:
         - key: "CriticalAddonsOnly"
