@@ -1,0 +1,12 @@
+replicaCount: 2
+
+image:
+  repository: ecommercedevacr787.azurecr.io/payment-service
+  tag: "1.0.1"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8002
+
+containerPort: 8002
