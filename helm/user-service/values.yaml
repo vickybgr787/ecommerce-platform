@@ -1,0 +1,12 @@
+replicaCount: 2
+
+image:
+  repository: ecommercedevacr787.azurecr.io/user-service
+  tag: "1.0.1"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8001
+
+containerPort: 8001
