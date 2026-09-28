@@ -71,7 +71,8 @@ function App() {
         const response = await fetch(`${API_BASE}${endpoint}`);
         const data = await response.json();
 
-        results[name] = data.status === "healthy" ? "Healthy" : "Unhealthy";
+        results[name] =
+          data.status === "healthy" ? "Healthy" : "Unhealthy";
       } catch {
         results[name] = "Down";
       }
@@ -90,6 +91,7 @@ function App() {
       <aside className="sidebar">
         <div className="logo">
           <div className="logo-icon">E</div>
+
           <div>
             <h2>E-Commerce</h2>
             <span>Platform</span>
@@ -157,7 +159,12 @@ function App() {
           />
         )}
 
-        {page === "orders" && <Orders orders={orders} />}
+        {page === "orders" && (
+          <Orders
+            orders={orders}
+            fetchOrders={fetchOrders}
+          />
+        )}
 
         {page === "users" && <Users users={users} />}
 
@@ -171,7 +178,10 @@ function App() {
 
 function NavButton({ label, active, onClick }) {
   return (
-    <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick}>
+    <button
+      className={`nav-button ${active ? "active" : ""}`}
+      onClick={onClick}
+    >
       {label}
     </button>
   );
@@ -214,9 +224,20 @@ function Dashboard({ orders, users, payments, health, setPage }) {
         </div>
 
         <div className="health-grid">
-          <HealthCard name="Order Service" status={health.order} />
-          <HealthCard name="User Service" status={health.user} />
-          <HealthCard name="Payment Service" status={health.payment} />
+          <HealthCard
+            name="Order Service"
+            status={health.order}
+          />
+
+          <HealthCard
+            name="User Service"
+            status={health.user}
+          />
+
+          <HealthCard
+            name="Payment Service"
+            status={health.payment}
+          />
         </div>
       </section>
 
@@ -255,7 +276,11 @@ function HealthCard({ name, status }) {
         <p>Backend microservice</p>
       </div>
 
-      <span className={`status ${healthy ? "healthy" : "unhealthy"}`}>
+      <span
+        className={`status ${
+          healthy ? "healthy" : "unhealthy"
+        }`}
+      >
         <span className="status-dot"></span>
         {status}
       </span>
@@ -263,11 +288,51 @@ function HealthCard({ name, status }) {
   );
 }
 
-function Orders({ orders }) {
+function Orders({ orders, fetchOrders }) {
+  const [creating, setCreating] = useState(false);
+
+  const createOrder = async () => {
+    try {
+      setCreating(true);
+
+      const response = await fetch(`${API_BASE}/orders`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create order");
+      }
+
+      await response.json();
+
+      await fetchOrders();
+    } catch (error) {
+      console.error("Create order error:", error);
+      alert("Failed to create order");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <section className="page-section">
-      <h2>Orders</h2>
-      <p className="page-description">Orders returned by the Order Service.</p>
+      <div className="section-header">
+        <div>
+          <h2>Orders</h2>
+
+          <p className="page-description">
+            Orders returned by the Order Service.
+          </p>
+        </div>
+
+        <button
+          className="refresh-btn"
+          onClick={createOrder}
+          disabled={creating}
+        >
+          {creating ? "Creating..." : "Create Order"}
+        </button>
+      </div>
 
       <div className="table-container">
         <table>
@@ -284,8 +349,11 @@ function Orders({ orders }) {
             {orders.map((order) => (
               <tr key={order.id}>
                 <td>#{order.id}</td>
+
                 <td>{order.product}</td>
+
                 <td>{order.quantity}</td>
+
                 <td>
                   <StatusBadge status={order.status} />
                 </td>
@@ -302,7 +370,10 @@ function Users({ users }) {
   return (
     <section className="page-section">
       <h2>Users</h2>
-      <p className="page-description">Users returned by the User Service.</p>
+
+      <p className="page-description">
+        Users returned by the User Service.
+      </p>
 
       <div className="table-container">
         <table>
@@ -319,8 +390,11 @@ function Users({ users }) {
             {users.map((user) => (
               <tr key={user.id}>
                 <td>#{user.id}</td>
+
                 <td>{user.name}</td>
+
                 <td>{user.email}</td>
+
                 <td>
                   <StatusBadge status={user.status} />
                 </td>
@@ -337,6 +411,7 @@ function Payments({ payments }) {
   return (
     <section className="page-section">
       <h2>Payments</h2>
+
       <p className="page-description">
         Payment information returned by the Payment Service.
       </p>
@@ -357,11 +432,15 @@ function Payments({ payments }) {
             {payments.map((payment) => (
               <tr key={payment.id}>
                 <td>#{payment.id}</td>
+
                 <td>#{payment.order_id}</td>
+
                 <td>#{payment.user_id}</td>
+
                 <td>
                   {payment.amount} {payment.currency}
                 </td>
+
                 <td>
                   <StatusBadge status={payment.status} />
                 </td>
@@ -378,6 +457,7 @@ function Services({ health }) {
   return (
     <section className="page-section">
       <h2>Services</h2>
+
       <p className="page-description">
         Backend microservices available through the Nginx API gateway.
       </p>
@@ -413,6 +493,7 @@ function ServiceRow({ name, route, port, status }) {
     <div className="service-row">
       <div>
         <h3>{name}</h3>
+
         <p>
           Route: {route} | Internal port: {port}
         </p>
@@ -432,7 +513,8 @@ function StatusBadge({ status }) {
         status === "ACTIVE" ||
         status === "Healthy"
           ? "success"
-          : status === "PENDING" || status === "PROCESSING"
+          : status === "PENDING" ||
+              status === "PROCESSING"
             ? "pending"
             : "failed"
       }`}
