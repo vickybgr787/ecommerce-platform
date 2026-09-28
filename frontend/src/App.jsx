@@ -166,11 +166,20 @@ function App() {
           />
         )}
 
-        {page === "users" && <Users users={users} />}
+        {page === "users" && (
+          <Users
+            users={users}
+            fetchUsers={fetchUsers}
+          />
+        )}
 
-        {page === "payments" && <Payments payments={payments} />}
+        {page === "payments" && (
+          <Payments payments={payments} />
+        )}
 
-        {page === "services" && <Services health={health} />}
+        {page === "services" && (
+          <Services health={health} />
+        )}
       </main>
     </div>
   );
@@ -366,14 +375,59 @@ function Orders({ orders, fetchOrders }) {
   );
 }
 
-function Users({ users }) {
+function Users({ users, fetchUsers }) {
+  const [creating, setCreating] = useState(false);
+
+  const createUser = async () => {
+    try {
+      setCreating(true);
+
+      const response = await fetch(`${API_BASE}/users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "New User",
+          email: `user${Date.now()}@example.com`,
+          status: "ACTIVE",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create user");
+      }
+
+      await response.json();
+
+      await fetchUsers();
+    } catch (error) {
+      console.error("Create user error:", error);
+      alert("Failed to create user");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <section className="page-section">
-      <h2>Users</h2>
+      <div className="section-header">
+        <div>
+          <h2>Users</h2>
 
-      <p className="page-description">
-        Users returned by the User Service.
-      </p>
+          <p className="page-description">
+            Users returned by the User Service.
+          </p>
+        </div>
+
+        <button
+          className="refresh-btn"
+          onClick={createUser}
+          disabled={creating}
+        >
+          {creating ? "Creating..." : "Create User"}
+        </button>
+      </div>
 
       <div className="table-container">
         <table>
