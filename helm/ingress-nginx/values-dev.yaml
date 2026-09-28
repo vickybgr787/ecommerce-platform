@@ -1,0 +1,23 @@
+controller:
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
+      effect: NoSchedule
+
+  service:
+    externalTrafficPolicy: Local
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /healthz
+
+  admissionWebhooks:
+    create:
+      tolerations:
+        - key: CriticalAddonsOnly
+          operator: Exists
+          effect: NoSchedule
+
+    patch:
+      tolerations:
+        - key: CriticalAddonsOnly
+          operator: Exists
+          effect: NoSchedule
