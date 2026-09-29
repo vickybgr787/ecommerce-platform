@@ -1,9 +1,5 @@
 name: Order Service CI
 
-permissions:
-  id-token: write
-  contents: read
-
 on:
   push:
     branches:
@@ -11,6 +7,7 @@ on:
     paths:
       - 'services/order-service/**'
       - '.github/workflows/order-service-ci.yml'
+      - '.github/workflows/reusable/microservice-ci.yml'
 
   pull_request:
     branches:
@@ -18,166 +15,25 @@ on:
     paths:
       - 'services/order-service/**'
       - '.github/workflows/order-service-ci.yml'
+      - '.github/workflows/reusable/microservice-ci.yml'
+
 
 jobs:
-  test-and-sast:
-    name: Unit Tests + SAST + Security Scan
-    runs-on: ubuntu-latest
+  microservice-ci:
+    uses: ./.github/workflows/reusable/microservice-ci.yml
 
-    defaults:
-      run:
-        working-directory: services/order-service
+    with:
+      service_name: order-service
+      service_path: services/order-service
+      dockerfile: services/order-service/Dockerfile
+      image_repository: ecommercedevacr787.azurecr.io/order-service
+      gitops_values_file: environments/dev/order-service-values.yaml
 
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest httpx
-
-      - name: Run unit tests
-        run: pytest -v
-
-      - name: Run Semgrep SAST
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: p/python
-
-      - name: Run Trivy dependency scan
-        uses: aquasecurity/trivy-action@v0.35.0
-        with:
-          scan-type: fs
-          scan-ref: services/order-service
-          scanners: vuln
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: services/order-service
-          file: services/order-service/Dockerfile
-          push: false
-          load: true
-          tags: |
-            order-service:${{ github.sha }}
-            ecommercedevacr787.azurecr.io/order-service:${{ github.sha }}
-
-      - name: Scan Docker image with Trivy
-        uses: aquasecurity/trivy-action@v0.35.0
-        with:
-          image-ref: order-service:${{ github.sha }}
-          scanners: vuln
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
-
-      - name: Azure Login
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Verify Azure authentication
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          az account show \
-            --query "{subscription:name,subscriptionId:id,tenantId:tenantId}" \
-            -o table
-
-      - name: Login to Azure Container Registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          az acr login --name ecommercedevacr787
-
-      - name: Push Docker image to ACR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          docker push ecommercedevacr787.azurecr.io/order-service:${{ github.sha }}
-
-      - name: Create GitHub App token
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.APP_CLIENT_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: vickybgr787
-          repositories: ecommerce-gitops
-          permission-contents: write
-
-      - name: Checkout GitOps repository
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/checkout@v4
-        with:
-          repository: vickybgr787/ecommerce-gitops
-          path: gitops
-          token: ${{ steps.app-token.outputs.token }}
-          persist-credentials: false
-
-      - name: Update GitOps image tag
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        working-directory: .
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("gitops/environments/dev/order-service-values.yaml")
-          text = path.read_text()
-
-          old_tag = None
-
-          for line in text.splitlines():
-              if line.strip().startswith("tag:"):
-                  old_tag = line.strip()
-                  break
-
-          if old_tag is None:
-              raise SystemExit("image.tag not found")
-
-          lines = text.splitlines()
-          updated = []
-
-          for line in lines:
-              if line.strip().startswith("tag:"):
-                  updated.append('  tag: "${{ github.sha }}"')
-              else:
-                  updated.append(line)
-
-          path.write_text("\n".join(updated) + "\n")
-
-          print(f"Updated {old_tag} -> tag: \"${{ github.sha }}\"")
-          PY
-
-      - name: Commit and push GitOps change
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        working-directory: .
-        env:
-          GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          git -C gitops config user.name "ecommerce-gitops-updater[bot]"
-          git -C gitops config user.email "ecommerce-gitops-updater[bot]@users.noreply.github.com"
-
-          git -C gitops add environments/dev/order-service-values.yaml
-
-          if git -C gitops diff --cached --quiet; then
-            echo "No GitOps changes to commit."
-            exit 0
-          fi
-
-          git -C gitops commit -m "gitops: deploy order-service ${{ github.sha }}"
-
-          git -C gitops \
-            -c credential.helper='!f() { echo username=x-access-token; echo password="$GH_APP_TOKEN"; }; f' \
-            push
+    vars:
+      APP_CLIENT_ID: ${{ vars.APP_CLIENT_ID }}

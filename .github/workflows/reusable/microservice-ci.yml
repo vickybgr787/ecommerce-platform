@@ -1,0 +1,214 @@
+name: Reusable Microservice CI
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        required: true
+        type: string
+
+      service_path:
+        required: true
+        type: string
+
+      dockerfile:
+        required: true
+        type: string
+
+      image_repository:
+        required: true
+        type: string
+
+      gitops_values_file:
+        required: true
+        type: string
+
+    secrets:
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        required: true
+      APP_PRIVATE_KEY:
+        required: true
+
+    vars:
+      APP_CLIENT_ID:
+        required: true
+
+
+permissions:
+  id-token: write
+  contents: read
+
+
+jobs:
+  test:
+    name: Unit Tests + SAST + Dependency Scan
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.service_path }}
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest httpx
+
+      - name: Run unit tests
+        run: pytest -v
+
+      - name: Run Semgrep SAST
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: p/python
+
+      - name: Run Trivy dependency scan
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ inputs.service_path }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+
+  build-scan-publish:
+    name: Build + Scan + Publish
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.service_path }}
+          file: ${{ inputs.dockerfile }}
+          push: false
+          load: true
+          tags: |
+            ${{ inputs.service_name }}:${{ github.sha }}
+            ${{ inputs.image_repository }}:${{ github.sha }}
+
+      - name: Scan Docker image with Trivy
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: ${{ inputs.service_name }}:${{ github.sha }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Azure Login
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify Azure authentication
+        run: |
+          az account show \
+            --query "{subscription:name,subscriptionId:id,tenantId:tenantId}" \
+            -o table
+
+      - name: Login to Azure Container Registry
+        run: |
+          az acr login --name ecommercedevacr787
+
+      - name: Push Docker image to ACR
+        run: |
+          docker push ${{ inputs.image_repository }}:${{ github.sha }}
+
+
+  gitops-promote:
+    name: GitOps Promotion
+    runs-on: ubuntu-latest
+    needs: build-scan-publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: vickybgr787
+          repositories: ecommerce-gitops
+          permission-contents: write
+
+      - name: Checkout GitOps repository
+        uses: actions/checkout@v4
+        with:
+          repository: vickybgr787/ecommerce-gitops
+          path: gitops
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Update GitOps image tag
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("gitops/${{ inputs.gitops_values_file }}")
+
+          if not path.exists():
+              raise SystemExit(f"GitOps values file not found: {path}")
+
+          text = path.read_text()
+
+          lines = text.splitlines()
+          updated = []
+          found = False
+
+          for line in lines:
+              if line.strip().startswith("tag:"):
+                  updated.append('  tag: "${{ github.sha }}"')
+                  found = True
+              else:
+                  updated.append(line)
+
+          if not found:
+              raise SystemExit("image.tag not found in GitOps values file")
+
+          path.write_text("\n".join(updated) + "\n")
+          PY
+
+      - name: Commit and push GitOps change
+        env:
+          GH_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git -C gitops config user.name "ecommerce-gitops-updater[bot]"
+          git -C gitops config user.email "ecommerce-gitops-updater[bot]@users.noreply.github.com"
+
+          git -C gitops add "${{ inputs.gitops_values_file }}"
+
+          if git -C gitops diff --cached --quiet; then
+            echo "No GitOps changes to commit."
+            exit 0
+          fi
+
+          git -C gitops commit \
+            -m "gitops: deploy ${{ inputs.service_name }} ${{ github.sha }}"
+
+          git -C gitops \
+            -c credential.helper='!f() { echo username=x-access-token; echo password="$GH_APP_TOKEN"; }; f' \
+            push
