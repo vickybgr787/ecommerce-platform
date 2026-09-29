@@ -65,3 +65,12 @@ jobs:
           push: false
           load: true
           tags: order-service:${{ github.sha }}
+
+      - name: Scan Docker image with Trivy
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: order-service:${{ github.sha }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
