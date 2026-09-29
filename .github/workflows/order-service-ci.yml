@@ -68,7 +68,9 @@ jobs:
           file: services/order-service/Dockerfile
           push: false
           load: true
-          tags: order-service:${{ github.sha }}
+          tags: |
+            order-service:${{ github.sha }}
+            ecommercedevacr787.azurecr.io/order-service:${{ github.sha }}
 
       - name: Scan Docker image with Trivy
         uses: aquasecurity/trivy-action@v0.35.0
@@ -80,6 +82,7 @@ jobs:
           exit-code: '1'
 
       - name: Azure Login
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -87,7 +90,18 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Verify Azure authentication
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           az account show \
             --query "{subscription:name,subscriptionId:id,tenantId:tenantId}" \
             -o table
+
+      - name: Login to Azure Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          az acr login --name ecommercedevacr787
+
+      - name: Push Docker image to ACR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker push ecommercedevacr787.azurecr.io/order-service:${{ github.sha }}
