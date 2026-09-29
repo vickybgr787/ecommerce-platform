@@ -178,4 +178,6 @@ jobs:
 
           git -C gitops commit -m "gitops: deploy order-service ${{ github.sha }}"
 
-          git -C gitops -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_APP_TOKEN" | base64)" push
+          git -C gitops \
+            -c credential.helper='!f() { echo username=x-access-token; echo password="$GH_APP_TOKEN"; }; f' \
+            push
