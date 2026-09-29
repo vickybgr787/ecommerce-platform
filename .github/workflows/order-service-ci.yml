@@ -46,3 +46,13 @@ jobs:
         uses: semgrep/semgrep-action@v1
         with:
           config: p/python
+
+      - name: Run Trivy dependency scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: services/order-service
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
