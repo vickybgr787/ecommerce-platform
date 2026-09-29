@@ -30,20 +30,32 @@ engine = create_engine(DATABASE_URL)
 
 producer = None
 
-for attempt in range(10):
-    try:
-        producer = KafkaProducer(
-            bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-            value_serializer=lambda value: json.dumps(value).encode("utf-8")
-        )
-        print("Connected to Kafka", flush=True)
-        break
-    except Exception as e:
-        print(
-            f"Kafka connection attempt {attempt + 1} failed: {e}",
-            flush=True
-        )
-        time.sleep(3)
+
+def initialize_kafka():
+    global producer
+
+    for attempt in range(10):
+        try:
+            producer = KafkaProducer(
+                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+                value_serializer=lambda value: json.dumps(value).encode("utf-8")
+            )
+            print("Connected to Kafka", flush=True)
+            return
+
+        except Exception as e:
+            print(
+                f"Kafka connection attempt {attempt + 1} failed: {e}",
+                flush=True
+            )
+            time.sleep(3)
+
+    print("Kafka connection failed after 10 attempts", flush=True)
+
+
+@app.on_event("startup")
+def startup_event():
+    initialize_kafka()
 
 
 @app.get("/health")
