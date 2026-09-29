@@ -117,10 +117,59 @@ jobs:
           repositories: ecommerce-gitops
           permission-contents: write
 
-      - name: Verify GitHub App access
+      - name: Checkout GitOps repository
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        uses: actions/checkout@v4
+        with:
+          repository: vickybgr787/ecommerce-gitops
+          path: gitops
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Update GitOps image tag
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          gh api repos/vickybgr787/ecommerce-gitops \
-            --jq '{name: .name, private: .private, default_branch: .default_branch}'
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("gitops/environments/dev/order-service-values.yaml")
+          text = path.read_text()
+
+          old_tag = None
+          for line in text.splitlines():
+              if line.strip().startswith("tag:"):
+                  old_tag = line.strip()
+                  break
+
+          if old_tag is None:
+              raise SystemExit("image.tag not found")
+
+          lines = text.splitlines()
+          updated = []
+
+          for line in lines:
+              if line.strip().startswith("tag:"):
+                  updated.append('  tag: "${{ github.sha }}"')
+              else:
+                  updated.append(line)
+
+          path.write_text("\n".join(updated) + "\n")
+
+          print(f"Updated {old_tag} -> tag: \"${{ github.sha }}\"")
+          PY
+
+      - name: Commit and push GitOps change
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git -C gitops config user.name "ecommerce-gitops-updater[bot]"
+          git -C gitops config user.email "ecommerce-gitops-updater[bot]@users.noreply.github.com"
+
+          git -C gitops add environments/dev/order-service-values.yaml
+
+          if git -C gitops diff --cached --quiet; then
+            echo "No GitOps changes to commit."
+            exit 0
+          fi
+
+          git -C gitops commit -m "gitops: deploy order-service ${{ github.sha }}"
+          git -C gitops push
