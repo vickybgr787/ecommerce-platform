@@ -11,7 +11,7 @@ on:
     paths:
       - 'services/order-service/**'
       - '.github/workflows/order-service-ci.yml'
-      - '.github/workflows/reusable/microservice-ci.yml'
+      - '.github/workflows/microservice-ci.yml'
 
   pull_request:
     branches:
@@ -19,12 +19,12 @@ on:
     paths:
       - 'services/order-service/**'
       - '.github/workflows/order-service-ci.yml'
-      - '.github/workflows/reusable/microservice-ci.yml'
+      - '.github/workflows/microservice-ci.yml'
 
 
 jobs:
   microservice-ci:
-    uses: ./.github/workflows/reusable/microservice-ci.yml
+    uses: ./.github/workflows/microservice-ci.yml
 
     with:
       service_name: order-service
