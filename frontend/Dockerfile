@@ -12,7 +12,9 @@ RUN npm run lint
 RUN npm run build
 
 
-FROM nginx:1.29-alpine
+FROM nginx:alpine
+
+RUN apk upgrade --no-cache libexpat
 
 COPY --from=build /app/dist /usr/share/nginx/html
 
