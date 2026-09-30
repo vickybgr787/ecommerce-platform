@@ -18,41 +18,19 @@ function App() {
 
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    checkHealth();
-    fetchOrders();
-    fetchUsers();
-    fetchPayments();
-  }, []);
-
   const fetchOrders = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/orders`);
-      const data = await response.json();
-      setOrders(data);
-    } catch (error) {
-      console.error("Orders error:", error);
-    }
+    const response = await fetch(`${API_BASE}/orders`);
+    return response.json();
   };
 
   const fetchUsers = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/users`);
-      const data = await response.json();
-      setUsers(data);
-    } catch (error) {
-      console.error("Users error:", error);
-    }
+    const response = await fetch(`${API_BASE}/users`);
+    return response.json();
   };
 
   const fetchPayments = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/payments`);
-      const data = await response.json();
-      setPayments(data);
-    } catch (error) {
-      console.error("Payments error:", error);
-    }
+    const response = await fetch(`${API_BASE}/payments`);
+    return response.json();
   };
 
   const checkHealth = async () => {
@@ -85,6 +63,67 @@ function App() {
 
     setLoading(false);
   };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadInitialData = async () => {
+      try {
+        const [ordersData, usersData, paymentsData] = await Promise.all([
+          fetchOrders(),
+          fetchUsers(),
+          fetchPayments(),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setOrders(ordersData);
+        setUsers(usersData);
+        setPayments(paymentsData);
+
+        const services = [
+          ["order", "/health/order"],
+          ["user", "/health/user"],
+          ["payment", "/health/payment"],
+        ];
+
+        const results = {};
+
+        await Promise.all(
+          services.map(async ([name, endpoint]) => {
+            try {
+              const response = await fetch(`${API_BASE}${endpoint}`);
+              const data = await response.json();
+
+              results[name] =
+                data.status === "healthy" ? "Healthy" : "Unhealthy";
+            } catch {
+              results[name] = "Down";
+            }
+          })
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setHealth((previous) => ({
+          ...previous,
+          ...results,
+        }));
+      } catch (error) {
+        console.error("Initial data loading error:", error);
+      }
+    };
+
+    loadInitialData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="app">
@@ -122,29 +161,27 @@ function App() {
             active={page === "payments"}
             onClick={() => setPage("payments")}
           />
-
-          <NavButton
-            label="Services"
-            active={page === "services"}
-            onClick={() => setPage("services")}
-          />
         </nav>
-
-        <div className="gateway">
-          <span className="online-dot"></span>
-          API Gateway
-          <small>localhost:8081</small>
-        </div>
       </aside>
 
-      <main className="main">
-        <header className="topbar">
+      <main className="main-content">
+        <header className="header">
           <div>
-            <h1>Order Management System</h1>
-            <p>Microservices platform dashboard</p>
+            <h1>
+              {page === "dashboard" && "Dashboard"}
+              {page === "orders" && "Orders"}
+              {page === "users" && "Users"}
+              {page === "payments" && "Payments"}
+            </h1>
+
+            <p>E-Commerce Platform</p>
           </div>
 
-          <button className="refresh-btn" onClick={checkHealth}>
+          <button
+            className="refresh-button"
+            onClick={checkHealth}
+            disabled={loading}
+          >
             {loading ? "Checking..." : "Refresh Health"}
           </button>
         </header>
@@ -155,31 +192,18 @@ function App() {
             users={users}
             payments={payments}
             health={health}
-            setPage={setPage}
           />
         )}
 
         {page === "orders" && (
-          <Orders
-            orders={orders}
-            fetchOrders={fetchOrders}
-          />
+          <OrdersPage orders={orders} setOrders={setOrders} />
         )}
 
         {page === "users" && (
-          <Users
-            users={users}
-            fetchUsers={fetchUsers}
-          />
+          <UsersPage users={users} setUsers={setUsers} />
         )}
 
-        {page === "payments" && (
-          <Payments payments={payments} />
-        )}
-
-        {page === "services" && (
-          <Services health={health} />
-        )}
+        {page === "payments" && <PaymentsPage payments={payments} />}
       </main>
     </div>
   );
@@ -196,385 +220,197 @@ function NavButton({ label, active, onClick }) {
   );
 }
 
-function Dashboard({ orders, users, payments, health, setPage }) {
+function Dashboard({ orders, users, payments, health }) {
   return (
-    <>
-      <section className="welcome">
-        <h2>Dashboard</h2>
-        <p>Overview of your e-commerce microservices platform.</p>
-      </section>
-
-      <section className="stats">
-        <StatCard
-          title="Orders"
-          value={orders.length}
-          onClick={() => setPage("orders")}
-        />
-
-        <StatCard
-          title="Users"
-          value={users.length}
-          onClick={() => setPage("users")}
-        />
-
-        <StatCard
-          title="Payments"
-          value={payments.length}
-          onClick={() => setPage("payments")}
-        />
-      </section>
-
-      <section className="section">
-        <div className="section-header">
-          <div>
-            <h2>Service Health</h2>
-            <p>Current status of backend services</p>
-          </div>
-        </div>
-
-        <div className="health-grid">
-          <HealthCard
-            name="Order Service"
-            status={health.order}
-          />
-
-          <HealthCard
-            name="User Service"
-            status={health.user}
-          />
-
-          <HealthCard
-            name="Payment Service"
-            status={health.payment}
-          />
-        </div>
-      </section>
-
-      <section className="architecture">
-        <h2>Request Flow</h2>
-
-        <div className="flow">
-          <div>React</div>
-          <span>→</span>
-          <div>Nginx Gateway</div>
-          <span>→</span>
-          <div>Microservices</div>
-        </div>
-      </section>
-    </>
-  );
-}
-
-function StatCard({ title, value, onClick }) {
-  return (
-    <button className="stat-card" onClick={onClick}>
-      <span>{title}</span>
-      <strong>{value}</strong>
-      <small>View {title}</small>
-    </button>
-  );
-}
-
-function HealthCard({ name, status }) {
-  const healthy = status === "Healthy";
-
-  return (
-    <div className="health-card">
-      <div>
-        <h3>{name}</h3>
-        <p>Backend microservice</p>
+    <div className="dashboard">
+      <div className="stats">
+        <StatCard title="Orders" value={orders.length} />
+        <StatCard title="Users" value={users.length} />
+        <StatCard title="Payments" value={payments.length} />
       </div>
 
-      <span
-        className={`status ${
-          healthy ? "healthy" : "unhealthy"
-        }`}
-      >
-        <span className="status-dot"></span>
-        {status}
-      </span>
+      <section className="health-section">
+        <h2>Service Health</h2>
+
+        <div className="health-grid">
+          <HealthCard name="Order Service" status={health.order} />
+          <HealthCard name="User Service" status={health.user} />
+          <HealthCard name="Payment Service" status={health.payment} />
+        </div>
+      </section>
     </div>
   );
 }
 
-function Orders({ orders, fetchOrders }) {
-  const [creating, setCreating] = useState(false);
+function StatCard({ title, value }) {
+  return (
+    <div className="stat-card">
+      <h3>{title}</h3>
+      <strong>{value}</strong>
+    </div>
+  );
+}
 
-  const createOrder = async () => {
+function HealthCard({ name, status }) {
+  return (
+    <div className="health-card">
+      <h3>{name}</h3>
+      <span>{status}</span>
+    </div>
+  );
+}
+
+function OrdersPage({ orders, setOrders }) {
+  const [userId, setUserId] = useState("");
+  const [product, setProduct] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [amount, setAmount] = useState("");
+
+  const createOrder = async (event) => {
+    event.preventDefault();
+
     try {
-      setCreating(true);
-
       const response = await fetch(`${API_BASE}/orders`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: Number(userId),
+          product,
+          quantity: Number(quantity),
+          amount: Number(amount),
+          status: "CREATED",
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to create order");
-      }
+      const data = await response.json();
 
-      await response.json();
+      setOrders([...orders, data]);
 
-      await fetchOrders();
+      setUserId("");
+      setProduct("");
+      setQuantity(1);
+      setAmount("");
     } catch (error) {
       console.error("Create order error:", error);
-      alert("Failed to create order");
-    } finally {
-      setCreating(false);
     }
   };
 
   return (
-    <section className="page-section">
-      <div className="section-header">
-        <div>
-          <h2>Orders</h2>
+    <section>
+      <h2>Create Order</h2>
 
-          <p className="page-description">
-            Orders returned by the Order Service.
-          </p>
-        </div>
+      <form onSubmit={createOrder}>
+        <input
+          value={userId}
+          onChange={(event) => setUserId(event.target.value)}
+          placeholder="User ID"
+          required
+        />
 
-        <button
-          className="refresh-btn"
-          onClick={createOrder}
-          disabled={creating}
-        >
-          {creating ? "Creating..." : "Create Order"}
-        </button>
-      </div>
+        <input
+          value={product}
+          onChange={(event) => setProduct(event.target.value)}
+          placeholder="Product"
+          required
+        />
 
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Order ID</th>
-              <th>Product</th>
-              <th>Quantity</th>
-              <th>Status</th>
-            </tr>
-          </thead>
+        <input
+          type="number"
+          value={quantity}
+          onChange={(event) => setQuantity(event.target.value)}
+          min="1"
+          required
+        />
 
-          <tbody>
-            {orders.map((order) => (
-              <tr key={order.id}>
-                <td>#{order.id}</td>
+        <input
+          type="number"
+          value={amount}
+          onChange={(event) => setAmount(event.target.value)}
+          placeholder="Amount"
+          step="0.01"
+          required
+        />
 
-                <td>{order.product}</td>
+        <button type="submit">Create Order</button>
+      </form>
 
-                <td>{order.quantity}</td>
+      <h2>Orders</h2>
 
-                <td>
-                  <StatusBadge status={order.status} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <pre>{JSON.stringify(orders, null, 2)}</pre>
     </section>
   );
 }
 
-function Users({ users, fetchUsers }) {
-  const [creating, setCreating] = useState(false);
+function UsersPage({ users, setUsers }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
 
-  const createUser = async () => {
+  const createUser = async (event) => {
+    event.preventDefault();
+
     try {
-      setCreating(true);
-
       const response = await fetch(`${API_BASE}/users`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: "New User",
-          email: `user${Date.now()}@example.com`,
+          name,
+          email,
           status: "ACTIVE",
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to create user");
-      }
+      const data = await response.json();
 
-      await response.json();
+      setUsers([...users, data]);
 
-      await fetchUsers();
+      setName("");
+      setEmail("");
     } catch (error) {
       console.error("Create user error:", error);
-      alert("Failed to create user");
-    } finally {
-      setCreating(false);
     }
   };
 
   return (
-    <section className="page-section">
-      <div className="section-header">
-        <div>
-          <h2>Users</h2>
+    <section>
+      <h2>Create User</h2>
 
-          <p className="page-description">
-            Users returned by the User Service.
-          </p>
-        </div>
+      <form onSubmit={createUser}>
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Name"
+          required
+        />
 
-        <button
-          className="refresh-btn"
-          onClick={createUser}
-          disabled={creating}
-        >
-          {creating ? "Creating..." : "Create User"}
-        </button>
-      </div>
+        <input
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="Email"
+          type="email"
+          required
+        />
 
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>User ID</th>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Status</th>
-            </tr>
-          </thead>
+        <button type="submit">Create User</button>
+      </form>
 
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td>#{user.id}</td>
+      <h2>Users</h2>
 
-                <td>{user.name}</td>
-
-                <td>{user.email}</td>
-
-                <td>
-                  <StatusBadge status={user.status} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <pre>{JSON.stringify(users, null, 2)}</pre>
     </section>
   );
 }
 
-function Payments({ payments }) {
+function PaymentsPage({ payments }) {
   return (
-    <section className="page-section">
+    <section>
       <h2>Payments</h2>
 
-      <p className="page-description">
-        Payment information returned by the Payment Service.
-      </p>
-
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Payment ID</th>
-              <th>Order ID</th>
-              <th>User ID</th>
-              <th>Amount</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {payments.map((payment) => (
-              <tr key={payment.id}>
-                <td>#{payment.id}</td>
-
-                <td>#{payment.order_id}</td>
-
-                <td>#{payment.user_id}</td>
-
-                <td>
-                  {payment.amount} {payment.currency}
-                </td>
-
-                <td>
-                  <StatusBadge status={payment.status} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <pre>{JSON.stringify(payments, null, 2)}</pre>
     </section>
-  );
-}
-
-function Services({ health }) {
-  return (
-    <section className="page-section">
-      <h2>Services</h2>
-
-      <p className="page-description">
-        Backend microservices available through the Nginx API gateway.
-      </p>
-
-      <div className="service-list">
-        <ServiceRow
-          name="Order Service"
-          route="/orders"
-          port="8000"
-          status={health.order}
-        />
-
-        <ServiceRow
-          name="User Service"
-          route="/users"
-          port="8001"
-          status={health.user}
-        />
-
-        <ServiceRow
-          name="Payment Service"
-          route="/payments"
-          port="8002"
-          status={health.payment}
-        />
-      </div>
-    </section>
-  );
-}
-
-function ServiceRow({ name, route, port, status }) {
-  return (
-    <div className="service-row">
-      <div>
-        <h3>{name}</h3>
-
-        <p>
-          Route: {route} | Internal port: {port}
-        </p>
-      </div>
-
-      <StatusBadge status={status} />
-    </div>
-  );
-}
-
-function StatusBadge({ status }) {
-  return (
-    <span
-      className={`badge ${
-        status === "SUCCESS" ||
-        status === "CONFIRMED" ||
-        status === "ACTIVE" ||
-        status === "Healthy"
-          ? "success"
-          : status === "PENDING" ||
-              status === "PROCESSING"
-            ? "pending"
-            : "failed"
-      }`}
-    >
-      {status}
-    </span>
   );
 }
 
