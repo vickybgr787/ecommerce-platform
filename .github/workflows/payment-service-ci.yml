@@ -1,0 +1,40 @@
+name: Payment Service CI
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/payment-service/**'
+      - '.github/workflows/payment-service-ci.yml'
+      - '.github/workflows/microservice-ci.yml'
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'services/payment-service/**'
+      - '.github/workflows/payment-service-ci.yml'
+      - '.github/workflows/microservice-ci.yml'
+
+jobs:
+  microservice-ci:
+    uses: ./.github/workflows/microservice-ci.yml
+
+    with:
+      service_name: payment-service
+      service_path: services/payment-service
+      dockerfile: services/payment-service/Dockerfile
+      image_repository: ecommercedevacr787.azurecr.io/payment-service
+      gitops_values_file: environments/dev/payment-service-values.yaml
+      app_client_id: ${{ vars.APP_CLIENT_ID }}
+
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
