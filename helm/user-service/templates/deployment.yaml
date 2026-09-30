@@ -25,6 +25,10 @@ spec:
 
       containers:
         - name: user-service
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
