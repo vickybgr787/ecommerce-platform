@@ -17,6 +17,12 @@ spec:
           operator: "Exists"
           effect: "NoSchedule"
 
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+
       containers:
         - name: user-service
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
