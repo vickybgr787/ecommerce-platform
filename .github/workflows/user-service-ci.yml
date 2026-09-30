@@ -10,6 +10,7 @@ on:
       - main
     paths:
       - 'services/user-service/**'
+      - 'helm/user-service/**'
       - '.github/workflows/user-service-ci.yml'
       - '.github/workflows/microservice-ci.yml'
 
@@ -18,6 +19,7 @@ on:
       - main
     paths:
       - 'services/user-service/**'
+      - 'helm/user-service/**'
       - '.github/workflows/user-service-ci.yml'
       - '.github/workflows/microservice-ci.yml'
 
