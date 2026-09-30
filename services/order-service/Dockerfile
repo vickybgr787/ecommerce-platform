@@ -1,5 +1,9 @@
 FROM python:3.12-slim
 
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system appgroup \
     && useradd --system --gid appgroup --create-home appuser
 
