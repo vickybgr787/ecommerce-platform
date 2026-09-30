@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: health-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /health
+spec:
+  ingressClassName: nginx
+
+  rules:
+    - http:
+        paths:
+          - path: /api/health/order
+            pathType: Exact
+            backend:
+              service:
+                name: order-service
+                port:
+                  number: 8000
+
+          - path: /api/health/user
+            pathType: Exact
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8001
+
+          - path: /api/health/payment
+            pathType: Exact
+            backend:
+              service:
+                name: payment-service
+                port:
+                  number: 8002
