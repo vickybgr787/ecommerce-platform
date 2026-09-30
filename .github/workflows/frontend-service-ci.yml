@@ -1,0 +1,40 @@
+name: Frontend CI
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-service-ci.yml'
+      - '.github/workflows/frontend-ci.yml'
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-service-ci.yml'
+      - '.github/workflows/frontend-ci.yml'
+
+jobs:
+  frontend-ci:
+    uses: ./.github/workflows/frontend-ci.yml
+
+    with:
+      service_name: frontend
+      service_path: frontend
+      dockerfile: frontend/Dockerfile
+      image_repository: ecommercedevacr787.azurecr.io/frontend
+      gitops_values_file: environments/dev/frontend-values.yaml
+      app_client_id: ${{ vars.APP_CLIENT_ID }}
+
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
