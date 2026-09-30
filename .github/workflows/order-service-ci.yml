@@ -10,6 +10,7 @@ on:
       - main
     paths:
       - 'services/order-service/**'
+      - 'helm/order-service/**'
       - '.github/workflows/order-service-ci.yml'
       - '.github/workflows/microservice-ci.yml'
 
@@ -18,6 +19,7 @@ on:
       - main
     paths:
       - 'services/order-service/**'
+      - 'helm/order-service/**'
       - '.github/workflows/order-service-ci.yml'
       - '.github/workflows/microservice-ci.yml'
 
