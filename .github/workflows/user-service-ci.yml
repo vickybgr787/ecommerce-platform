@@ -1,0 +1,40 @@
+name: User Service CI
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/user-service/**'
+      - '.github/workflows/user-service-ci.yml'
+      - '.github/workflows/microservice-ci.yml'
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'services/user-service/**'
+      - '.github/workflows/user-service-ci.yml'
+      - '.github/workflows/microservice-ci.yml'
+
+jobs:
+  microservice-ci:
+    uses: ./.github/workflows/microservice-ci.yml
+
+    with:
+      service_name: user-service
+      service_path: services/user-service
+      dockerfile: services/user-service/Dockerfile
+      image_repository: ecommercedevacr787.azurecr.io/user-service
+      gitops_values_file: environments/dev/user-service-values.yaml
+      app_client_id: ${{ vars.APP_CLIENT_ID }}
+
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
