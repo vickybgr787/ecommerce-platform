@@ -27,5 +27,11 @@ spec:
         - name: payment-service
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
+
           ports:
             - containerPort: {{ .Values.containerPort }}
