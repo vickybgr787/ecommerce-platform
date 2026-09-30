@@ -10,6 +10,7 @@ on:
       - main
     paths:
       - 'services/payment-service/**'
+      - 'helm/payment-service/**'
       - '.github/workflows/payment-service-ci.yml'
       - '.github/workflows/microservice-ci.yml'
 
@@ -18,6 +19,7 @@ on:
       - main
     paths:
       - 'services/payment-service/**'
+      - 'helm/payment-service/**'
       - '.github/workflows/payment-service-ci.yml'
       - '.github/workflows/microservice-ci.yml'
 
